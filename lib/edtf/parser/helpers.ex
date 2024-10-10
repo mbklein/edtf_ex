@@ -5,6 +5,12 @@ defmodule EDTF.Parser.Helpers do
 
   import Bitwise
 
+  @qualifier_attributes %{
+    ~c"~" => [:approximate],
+    ~c"?" => [:uncertain],
+    ~c"%" => [:approximate, :uncertain]
+  }
+
   @doc """
   Calculate the appropriate qualifier bitmasks for a given YYYY, MM, or DD. Bits
   are calculated from the left and shifted left to account for the specific
@@ -69,11 +75,8 @@ defmodule EDTF.Parser.Helpers do
     mask = ((1 <<< length(bitstring)) - 1) <<< shift
 
     attributes =
-      case qualifier do
-        ~c"~" -> [approximate: mask]
-        ~c"?" -> [uncertain: mask]
-        ~c"%" -> [approximate: mask, uncertain: mask]
-      end
+      Map.get(@qualifier_attributes, qualifier)
+      |> Enum.map(&{&1, mask})
 
     [
       value: IO.iodata_to_binary([sign | bitstring]) |> String.to_integer(),
@@ -94,6 +97,8 @@ defmodule EDTF.Parser.Helpers do
     ```
   """
   def apply_sign(rest, value, context, _line, _offset) do
+    value = List.flatten(value)
+
     result =
       case Keyword.get(value, :sign) do
         ~c"-" -> 0 - Keyword.get(value, :value)
@@ -101,6 +106,28 @@ defmodule EDTF.Parser.Helpers do
       end
 
     {rest, value |> Keyword.delete(:sign) |> Keyword.put(:value, result), context}
+  end
+
+  @doc """
+  Apply a parsed qualifier to a single value.
+
+  Example:
+    ```elixir
+    iex> apply_qualifier("", [value: 2000, qualifier: ~c"%"], %{}, nil, nil)
+    {"", [attributes: [approximate: true, uncertain: true], value: 2000], %{}}
+
+    iex> apply_qualifier("", [value: 2000], %{}, nil, nil)
+    {"", [attributes: [], value: 2000], %{}}
+    ```
+  """
+  def apply_qualifier(rest, value, context, _line, _offset) do
+    qualifier = Keyword.get(value, :qualifier)
+
+    attributes =
+      Map.get(@qualifier_attributes, qualifier, [])
+      |> Enum.map(&{&1, true})
+
+    {rest, Keyword.delete(value, :qualifier) |> Keyword.put(:attributes, attributes), context}
   end
 
   @doc """
@@ -164,11 +191,8 @@ defmodule EDTF.Parser.Helpers do
   defp reduce(qualifier, values) do
     if Enum.all?(values, fn v -> Keyword.get(v, :attributes, []) |> length() == 0 end) do
       attributes =
-        case qualifier do
-          ~c"?" -> [uncertain: true]
-          ~c"~" -> [approximate: true]
-          ~c"%" -> [approximate: true, uncertain: true]
-        end
+        Map.get(@qualifier_attributes, qualifier, [])
+        |> Enum.map(&{&1, true})
 
       values = Enum.reduce(values, [], fn value, acc -> [Keyword.get(value, :value) | acc] end)
 

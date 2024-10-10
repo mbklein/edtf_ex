@@ -28,11 +28,12 @@ defmodule EDTF.Date do
 
   def assemble({_, nil}), do: nil
 
-  def assemble({:century, value}),
-    do: %__MODULE__{type: :century, values: [Keyword.get(value, :value)]}
-
-  def assemble({:decade, value}),
-    do: %__MODULE__{type: :decade, values: [Keyword.get(value, :value)]}
+  def assemble({type, value}) when type == :decade or type == :century,
+    do: %__MODULE__{
+      type: type,
+      values: [Keyword.get(value, :value)],
+      attributes: Keyword.get(value, :attributes)
+    }
 
   def assemble({:year, value}) do
     attributes = Keyword.get(value, :attributes, [])

@@ -9,6 +9,7 @@ defmodule EDTF.Parser do
   # Basic combinators
   qualifier = ascii_char([??, ?~, ?%])
   component_qualifier = lookahead_not(qualifier |> concat(eos())) |> concat(qualifier)
+  digit = ascii_char([?0..?9])
   digit_or_x = ascii_char([?0..?9, ?X])
   sign = ascii_char([?+, ?-])
   year = times(digit_or_x, 4)
@@ -83,11 +84,14 @@ defmodule EDTF.Parser do
   signed_integer = fn digits ->
     optional(sign |> tag(:sign))
     |> concat(
-      times(ascii_char([?0..?9]), digits)
+      times(digit, digits)
       |> post_traverse({Helpers, :to_integer, []})
       |> unwrap_and_tag(:value)
+      |> wrap()
     )
+    |> concat(optional(qualifier) |> tag(:qualifier))
     |> post_traverse({Helpers, :apply_sign, []})
+    |> post_traverse({Helpers, :apply_qualifier, []})
   end
 
   edtf_century = signed_integer.(2)
